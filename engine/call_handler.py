@@ -2,7 +2,7 @@
 import asyncio
 import structlog
 import os
-import aioari
+import asyncari
 from voice_agent import VoiceAgent
 from database.connection import get_db
 from persona_manager import PersonaManager
@@ -24,7 +24,7 @@ class CallHandler:
 
     async def start(self):
         """Connect to Asterisk ARI and listen for calls."""
-        client = await aioari.connect(
+        client = await asyncari.connect(
             f'http://{self.asterisk_host}:8088',
             self.ari_user,
             self.ari_password
