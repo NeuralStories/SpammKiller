@@ -1,0 +1,179 @@
+version: '3.9'
+
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    container_name: scameater-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - scameater_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: scameater-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - scameater_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: scameater-seaweedfs
+    restart: unless-stopped
+    command: "server -s3 -volume.maxDiskUsage=unlimited -dir=/data"
+    volumes:
+      - seaweedfs_data:/data
+    ports:
+      - "9000:8333"  # S3 API
+      - "9001:9333"  # Filer UI
+      - "9002:8080"  # Volume server
+    networks:
+      - scameater_net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    container_name: scameater-engine
+    restart: unless-stopped
+    environment:
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - CARTESIA_API_KEY=${CARTESIA_API_KEY}
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - SEAWEEDFS_ENDPOINT=seaweedfs:8333
+      - SEAWEEDFS_ACCESS_KEY=${MINIO_USER}
+      - SEAWEEDFS_SECRET_KEY=${MINIO_PASSWORD}
+      - SEAWEEDFS_BUCKET=call-recordings
+      - ASTERISK_HOST=asterisk
+      - ASTERISK_ARI_USER=${ASTERISK_ARI_USER}
+      - ASTERISK_ARI_PASSWORD=${ASTERISK_ARI_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_HOST=http://langfuse:3000
+    volumes:
+      - audio_recordings:/recordings
+    ports:
+      - "5000:5000"
+    networks:
+      - scameater_net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+
+  asterisk:
+    image: andrius/asterisk:latest
+    container_name: scameater-asterisk
+    restart: unless-stopped
+    network_mode: host
+    entrypoint: ["/bin/sh", "/etc/asterisk/entrypoint.sh"]
+    volumes:
+      - ./asterisk/pjsip.conf.template:/etc/asterisk/pjsip.conf.template
+      - ./asterisk/entrypoint.sh:/etc/asterisk/entrypoint.sh
+      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
+      - ./asterisk/ari.conf:/etc/asterisk/ari.conf
+      - ./asterisk/rtp.conf:/etc/asterisk/rtp.conf
+      - asterisk_spool:/var/spool/asterisk
+    environment:
+      - ASTERISK_UID=1000
+      - ASTERISK_GID=1000
+      - ZADARMA_SIP_USER=${ZADARMA_SIP_USER}
+      - ZADARMA_SIP_PASSWORD=${ZADARMA_SIP_PASSWORD}
+      - ZADARMA_SIP_SERVER=${ZADARMA_SIP_SERVER:-sip.zadarma.com}
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: scameater-dashboard
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - SEAWEEDFS_ENDPOINT=seaweedfs:8333
+      - SEAWEEDFS_ACCESS_KEY=${MINIO_USER}
+      - SEAWEEDFS_SECRET_KEY=${MINIO_PASSWORD}
+      - API_URL=http://api:8000
+    ports:
+      - "8501:8501"
+    networks:
+      - scameater_net
+    depends_on:
+      - db
+      - redis
+      - api
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: scameater-api
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+    ports:
+      - "8000:8000"
+    networks:
+      - scameater_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: scameater-langfuse
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
+      - SALT=${LANGFUSE_SALT}
+      - NEXTAUTH_URL=http://localhost:3000
+    ports:
+      - "3000:3000"
+    networks:
+      - scameater_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+networks:
+  scameater_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  seaweedfs_data:
+  asterisk_spool:
+  audio_recordings:
