@@ -21,7 +21,7 @@ echo "[2/8] Installing base packages..."
 apt install -y \
     curl wget git vim \
     build-essential \
-    python3.11 python3.11-venv python3-pip \
+    python3 python3-venv python3-pip \
     ffmpeg libsndfile1 portaudio19-dev \
     ufw nginx certbot python3-certbot-nginx
 
