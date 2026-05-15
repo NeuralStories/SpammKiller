@@ -47,11 +47,6 @@ services:
       - "9002:8080"  # Volume server
     networks:
       - scameater_net
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   engine:
     build:
@@ -66,8 +61,8 @@ services:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - SEAWEEDFS_ENDPOINT=seaweedfs:8333
-      - SEAWEEDFS_ACCESS_KEY=${MINIO_USER}
-      - SEAWEEDFS_SECRET_KEY=${MINIO_PASSWORD}
+      - SEAWEEDFS_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY}
+      - SEAWEEDFS_SECRET_KEY=${SEAWEEDFS_SECRET_KEY}
       - SEAWEEDFS_BUCKET=call-recordings
       - ASTERISK_HOST=asterisk
       - ASTERISK_ARI_USER=${ASTERISK_ARI_USER}
@@ -89,7 +84,6 @@ services:
       redis:
         condition: service_healthy
       seaweedfs:
-        condition: service_healthy
 
   asterisk:
     image: andrius/asterisk:latest
@@ -121,8 +115,8 @@ services:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - SEAWEEDFS_ENDPOINT=seaweedfs:8333
-      - SEAWEEDFS_ACCESS_KEY=${MINIO_USER}
-      - SEAWEEDFS_SECRET_KEY=${MINIO_PASSWORD}
+      - SEAWEEDFS_ACCESS_KEY=${SEAWEEDFS_ACCESS_KEY}
+      - SEAWEEDFS_SECRET_KEY=${SEAWEEDFS_SECRET_KEY}
       - API_URL=http://api:8000
     ports:
       - "8501:8501"
