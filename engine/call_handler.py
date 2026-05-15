@@ -2,7 +2,7 @@
 import asyncio
 import structlog
 import os
-import ari
+import aioari
 from voice_agent import VoiceAgent
 from database.connection import get_db
 from persona_manager import PersonaManager
@@ -24,24 +24,33 @@ class CallHandler:
 
     async def start(self):
         """Connect to Asterisk ARI and listen for calls."""
-        client = ari.connect(
+        client = await aioari.connect(
             f'http://{self.asterisk_host}:8088',
             self.ari_user,
             self.ari_password
         )
 
         # Register event handlers
-        client.on_channel_event('StasisStart', self.on_call_start)
-        client.on_channel_event('StasisEnd', self.on_call_end)
-        client.on_channel_event('ChannelEnteredBridge', self.on_bridge_enter)
-        client.on_channel_event('ChannelLeftBridge', self.on_bridge_leave)
+        @client.on_channel_event('StasisStart')
+        async def on_start(channel, event):
+            await self.on_call_start(channel, event)
+
+        @client.on_channel_event('StasisEnd')
+        async def on_end(channel, event):
+            await self.on_call_end(channel, event)
+
+        @client.on_channel_event('ChannelEnteredBridge')
+        async def on_bridge(channel, event):
+            await self.on_bridge_enter(channel, event)
+
+        @client.on_channel_event('ChannelLeftBridge')
+        async def on_leave_bridge(channel, event):
+            await self.on_bridge_leave(channel, event)
 
         log.info("Connected to Asterisk ARI", app="honeypot-app")
 
-        # Keep connection alive - this blocks forever
-        await asyncio.get_event_loop().run_in_executor(
-            None, client.run, 'honeypot-app'
-        )
+        # Run the ARI application
+        await client.run('honeypot-app')
 
     async def on_call_start(self, channel, event):
         """Handle new incoming call."""
