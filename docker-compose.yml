@@ -83,7 +83,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      seaweedfs:
+      seaweedfs
 
   asterisk:
     image: andrius/asterisk:latest
