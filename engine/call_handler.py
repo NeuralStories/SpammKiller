@@ -30,7 +30,7 @@ class CallHandler:
             self.ari_password
         )
 
-        # Register event handlers
+        # Register event handlers using decorators (asyncari style)
         @client.on_channel_event('StasisStart')
         async def on_start(channel, event):
             await self.on_call_start(channel, event)
@@ -44,12 +44,12 @@ class CallHandler:
             await self.on_bridge_enter(channel, event)
 
         @client.on_channel_event('ChannelLeftBridge')
-        async def on_leave_bridge(channel, event):
+        async def on_leave(channel, event):
             await self.on_bridge_leave(channel, event)
 
         log.info("Connected to Asterisk ARI", app="honeypot-app")
 
-        # Run the ARI application
+        # Run the ARI application (asyncari run is async)
         await client.run('honeypot-app')
 
     async def on_call_start(self, channel, event):
