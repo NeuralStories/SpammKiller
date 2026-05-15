@@ -16,7 +16,7 @@ echo "[1/5] Building Docker images..."
 docker compose build
 
 echo "[2/5] Starting infrastructure services..."
-docker compose up -d db redis minio
+docker compose up -d db redis seaweedfs
 
 echo "[3/5] Waiting for database to be ready..."
 sleep 10
